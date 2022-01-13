@@ -4,9 +4,13 @@ import com.todolist.dataModel.TodoData;
 import com.todolist.dataModel.TodoItem;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
+import javafx.event.ActionEvent;
+import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.*;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.paint.Color;
 import javafx.util.Callback;
@@ -31,6 +35,8 @@ public class Controller {
 
     @FXML
     private BorderPane mainBorderPane;
+
+    private ContextMenu listContextMenu;
 
     public void initialize() {
 //        TodoItem item1 = new TodoItem("Mail birthday card", "Buy a 30th birthday card for John",
@@ -113,7 +119,7 @@ public class Controller {
                             if (todoItem.getDeadline().equals(LocalDate.now())) {
                                 setTextFill(Color.RED);
                             } else if (todoItem.getDeadline().isBefore(LocalDate.now())) {
-                                setTextFill(Color.GRAY);
+                                setTextFill(Color.BLUE);
                             } else if (todoItem.getDeadline().equals(LocalDate.now().plusDays(1))) {
                                 setTextFill(Color.BROWN);
                             }
@@ -121,17 +127,118 @@ public class Controller {
                     }
                 };
 
+                //lấy giá trị xác định trống hay không của cell và thêm sự kiện nghe thay đổi
+                //nếu giá trị mới isNowEmpty là true thì set ContextMenu là null không thì
+                //thêm ContextMenu đã tạo vào
+                cell.emptyProperty().addListener((observableValue, wasEmpty, isNowEmpty) -> {
+                    if (isNowEmpty) {
+                        cell.setContextMenu(null);
+                    } else {
+                        cell.setContextMenu(listContextMenu);
+                    }
+                });
+
                 //trả về lớp ẩn danh kế thừa cell trên vừa Override lại các updateItem của nó
                 return cell;
             }
         });
+
+        //tạo 1 ContextMenu thứ sẽ hiện lên khi kích chuột phải vào control(control này cần được gán ContextMenu)
+        listContextMenu = new ContextMenu();
+
+        //tạo 1 MenuItem tên Delete để sau đó gán vào item của ContextMenu trên
+        //tạo 1 MenuItem tên Edit để sau đó gán vào item của ContextMenu trên
+        MenuItem deleteMenuItem = new MenuItem("Delete");
+        MenuItem editMenuItem = new MenuItem("Edit");
+
+        //tạo sự kiện cho MenuItem này khi kích chuột là tìm cell/hàng của todoListView đang được chọn
+        //và lấy ra item của cell bằng hàm getSelectedItem, trong lần này item là 1 TodoItem
+        //sau đó gọi hàm xóa item này trong List của TodoData, List này đã ràng buộc với todoListView
+        // nên xóa ở List đó todoListView cũng thay đổi theo
+        deleteMenuItem.setOnAction(new EventHandler<ActionEvent>() {
+            @Override
+            public void handle(ActionEvent event) {
+                TodoItem item = todoListView.getSelectionModel().getSelectedItem();
+                deleteItem(item);
+            }
+        });
+
+        //tạo sự kiện cho MenuItem này khi kích chuột là tìm cell/hàng của todoListView đang được chọn
+        //và lấy ra item của cell bằng hàm getSelectedItem, trong lần này item là 1 TodoItem
+        //sau đó gọi hàm edit giá trị của item này trong List của TodoData, List này đã ràng buộc với todoListView
+        //nên edit ở List đó todoListView cũng thay đổi theo
+        editMenuItem.setOnAction(new EventHandler<ActionEvent>() {
+            @Override
+            public void handle(ActionEvent event) {
+                TodoItem item = todoListView.getSelectionModel().getSelectedItem();
+                editItem(item);
+            }
+        });
+
+        //thêm 2 MenuItem này vào ContextMenu
+        listContextMenu.getItems().add(deleteMenuItem);
+        listContextMenu.getItems().add(editMenuItem);
+
     }
 
-    @FXML
-    public void showNewItemDialog() {
+    //xóa 1 TodoItem có trong List của class singerton TodoData
+    private void deleteItem(TodoItem item) {
+        // enum AlertType.CONFIRMATION nằm trong class Alert
+        // hàm khởi tạo new Alert() sẽ nhận giá trị của enum này để xác định kiểu của Alert
+        // ở đây kiểu là CONFIRMATION sẽ có 2 nút OK và CANCEL
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Delete Todo Item");
+        alert.setHeaderText("Delete item: " + item.getShortDescription());
+        alert.setContentText("Are you sure? Press OK to confirm, or cancel to back out.");
+
+        //lấy giá trị nút đã nhấn của alert
+        Optional<ButtonType> result = alert.showAndWait();
+
+        //result.get() trả về 1 đối tượng ButtonType của nó,
+        //ButtonType.OK là 1 đối tượng tính cả .OK, .OK không phải thuộc tính
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+
+            //nếu nhấn OK thì gọi hàm xóa trong item trong List của class TodoData
+            TodoData.getInstance().deleteTodoItem(item);
+        }
+    }
+
+    //xóa 1 TodoItem có trong List của class singerton TodoData khi nhấn phím
+    public void handleKeyPressed(KeyEvent keyEvent) {
+        //lấy giá TodoItem đang được chọn trong listview
+        TodoItem selectedItem = todoListView.getSelectionModel().getSelectedItem();
+
+        //nếu TodoItem ko null tức có cell của listview đang được chọn và sự kiện key là nhấn DELETE
+        //thì gọi hàm xóa TodoItem này trong list của TodoData
+        //keyEvent.getCode() lấy ra giá trị key/nút đã nhấn và equals nó với enum KeyCode.DELETE
+        if (selectedItem != null && keyEvent.getCode().equals(KeyCode.DELETE)) {
+            deleteItem(selectedItem);
+        }
+    }
+
+    //edit giá trị của TodoItem truyền vào trong list của TodoData
+    private void editItem(TodoItem item) {
+        //lấy vị trí/ìndex của tham số TodoItem truyền vào hàm này trong list của TodoData
+        int index = TodoData.getInstance().getTodoItems().indexOf(item);
+
+        //nhận TodoItem từ hàm lấy kết quả nhập vào trên dialog, truyền các tham số String để hiển thị title, header và
+        //tham số TodoItem là TodoItem đang chọn trên list view để gán các giá trị của nó cho các control trong dialog
+        //tham số TodoItem chính là tham số truyền vào từ hàm này
+        TodoItem editItem = showResultItemDialog(item,"Edit Todo Item", "Use this dialog to edit todo item");
+
+        //nếu kết quả ko null tức đã ấn OK và nhập tất cả các giá trị từ dialog thì lấy TodoItem này set lại giá
+        //trị trong list của TodoData tại đúng vị trí/index của TodoItem đang được list view chọn
+        if (editItem != null) {
+            TodoData.getInstance().getTodoItems().set(index, editItem);
+        }
+    }
+
+    //tạo 1 dialog nhập các thông tin của 1 TodoItem mới và trả về kết quả TodoItem này nếu nhấn OK
+    //còn ấn cancel trả về null
+    private TodoItem showResultItemDialog(TodoItem todoItem, String title, String headerText) {
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("Add New Todo Item");
-        dialog.setHeaderText("Use this dialog to create a new todo item");
+        dialog.setTitle(title);
+        dialog.setHeaderText(headerText);
 
         //lấy cửa sổ cha của ứng dụng gán cho Dialog để
         //khi hiển thị Dialog các phần khác trong ứng dụng không thể thao tác
@@ -157,6 +264,14 @@ public class Controller {
             e.printStackTrace();
         }
 
+        //lấy ra controller của file fxml, khi chạy ứng dụng các dữ liệu trên file fxml sẽ truyền cho controller này
+        //không tạo đối tượng mới của controller vì khi tạo mới tất cả dữ liệu sẽ không có
+        DialogController controller = fxmlLoader.getController();
+
+        //gọi hàm truyền vào TodoItem lấy từ tham số của hàm này và gán các giá trị cho các control của dialog bằng
+        //giá trị các thuộc tính của TodoItem này truyền vào để tạo hiển thị trên dialog
+        controller.setValueDialog(todoItem);
+
         //showAndWait sẽ hiển thị dialog và đợi người dùng nhấn 1 nút nào đó sẽ trả về kết quả 1 Optional
         //show thì trả về luôn nên không thể sử dụng
         //kết quả trả về sẽ được truyền cho Optional kiểu thuộc tính ButtonType
@@ -165,38 +280,74 @@ public class Controller {
         //isPresent kiểm tra xem ButtonType nhận được có null không, nếu có trả về false
         if (result.isPresent() && result.get() == ButtonType.OK) {
 
-            //lấy ra controller của file fxml, khi chạy ứng dụng các dữ liệu trên file fxml sẽ truyền cho controller này
-            //không tạo đối tượng mới của controller vì khi tạo mới tất cả dữ liệu sẽ không có
-            DialogController controller = fxmlLoader.getController();
+            //nhận TodoItem đã lấy từ dialog người dùng nhập vào bằng
+            //hàm processResultsItem trong controller của dialog FXML và trả về TodoItem này
+            //nếu trên dialog không nhập đầy đủ các giá trị hàm sẽ trả về null
+            TodoItem newItem = controller.processResultsItem();
 
-            //thực hiện thêm TodoItem đã được gán từ dữ liệu trong dialog vào list của TodoData và trả về TodoItem này
-            TodoItem newItem = controller.processResults();
-
-//            //lấy list của TodoData cập nhật lại cho todoListView của Controller để
-//            //cập nhật danh sách trong ứng dụng đang chạy
-//            todoListView.getItems().setAll(TodoData.getInstance().getTodoItems());
-
-            //cho ListView chọn TodoItem vừa được thêm vào
-            todoListView.getSelectionModel().select(newItem);
-//            System.out.println("OK pressed");
+            return newItem;
         }
-//        else {
-//            System.out.println("Cancel pressed");
-//        }
+
+        //nếu người dùng không ấn OK trả về null
+        return null;
     }
 
     @FXML
+    //thêm 1 TodoItem người dùng nhập vào dialog vào list của TodoData và
+    //cho ListView chọn TodoItem này
+    public void showNewItemDialog() {
+
+        //nhận TodoItem từ hàm lấy kết quả nhập vào trên dialog, truyền các tham số String để hiển thị title, header và
+        //tham số TodoItem là TodoItem đang chọn trên list view để gán các giá trị của nó cho các control trong dialog
+        //do tạo mới không phải edit 1 TodoItem nên truyền vào null
+        TodoItem newItem = showResultItemDialog(null,"Add New Todo Item", "Use this dialog to create a new todo item");
+
+        //nếu kết quả ko null tức đã ấn OK và nhập tất cả các giá trị từ dialog thì thêm nó vào list của TodoData
+        //thì thêm new TodoItem người dùng nhập vào dialog vào list của TodoData và cho ListView chọn TodoItem này
+        if (newItem != null) {
+            TodoData.getInstance().addTodoItem(newItem);
+
+            //cho ListView chọn TodoItem vừa được thêm vào
+            todoListView.getSelectionModel().select(newItem);
+        }
+
+//        //isPresent kiểm tra xem ButtonType nhận được có null không, nếu có trả về false
+//        if (result.isPresent() && result.get() == ButtonType.OK) {
+//
+//            //lấy ra controller của file fxml, khi chạy ứng dụng các dữ liệu trên file fxml sẽ truyền cho controller này
+//            //không tạo đối tượng mới của controller vì khi tạo mới tất cả dữ liệu sẽ không có
+//            DialogController controller = fxmlLoader.getController();
+//
+//            //thực hiện thêm TodoItem đã được gán từ dữ liệu trong dialog vào list của TodoData và trả về TodoItem này
+//            TodoItem newItem = controller.processResultsItem();
+//
+////            //lấy list của TodoData cập nhật lại cho todoListView của Controller để
+////            //cập nhật danh sách trong ứng dụng đang chạy
+////            todoListView.getItems().setAll(TodoData.getInstance().getTodoItems());
+//
+//            //cho ListView chọn TodoItem vừa được thêm vào
+//            todoListView.getSelectionModel().select(newItem);
+////            System.out.println("OK pressed");
+//        }
+////        else {
+////            System.out.println("Cancel pressed");
+////        }
+    }
+
+    @FXML
+    //mỗi khi click vào ListView sẽ xem đang chọn item nào trong listview
+    // và set giá trị cho các vùng hiển thị thông tin
     public void handleClickListView() {
-        //mỗi khi click vào ListView sẽ xem đang chọn item nào trong listview
-        TodoItem item = todoListView.getSelectionModel().getSelectedItem();
-        itemDetailsTextArea.setText(item.getDetails());
-        deadlineLabel.setText(item.getDeadline().toString());
-
-//        StringBuilder sb = new StringBuilder();
-//        sb.append(item.getDetails());
-//        sb.append("\n\n\n\n");
-//        sb.append(item.getDeadline() + "");
-
-//        itemDetailsTextArea.setText(sb.toString());
+//        //mỗi khi click vào ListView sẽ xem đang chọn item nào trong listview
+//        TodoItem item = todoListView.getSelectionModel().getSelectedItem();
+//        itemDetailsTextArea.setText(item.getDetails());
+//        deadlineLabel.setText(item.getDeadline().toString());
+//
+////        StringBuilder sb = new StringBuilder();
+////        sb.append(item.getDetails());
+////        sb.append("\n\n\n\n");
+////        sb.append(item.getDeadline() + "");
+//
+////        itemDetailsTextArea.setText(sb.toString());
     }
 }

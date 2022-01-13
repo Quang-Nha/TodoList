@@ -1,6 +1,5 @@
 package com.todolist;
 
-import com.todolist.dataModel.TodoData;
 import com.todolist.dataModel.TodoItem;
 import javafx.fxml.FXML;
 import javafx.scene.control.DatePicker;
@@ -19,15 +18,35 @@ public class DialogController {
     @FXML
     private DatePicker deadlinePicker;
 
-    //thêm TodoItem lấy từ dialog vào list của TodoData
-    public TodoItem processResults() {
+    public void initialize() {
+        shortDescriptionField.setText("");
+        detailArea.setText("");
+        deadlinePicker.setValue(LocalDate.now());
+    }
+
+    //lấy TodoItem từ dialog người dùng nhập vào
+    public TodoItem processResultsItem() {
         String shortDescription = shortDescriptionField.getText().trim();
         String detail = detailArea.getText().trim();
         LocalDate deadlineValue = deadlinePicker.getValue();
 
         TodoItem newItem = new TodoItem(shortDescription, detail, deadlineValue);
-        TodoData.getInstance().addTodoItem(newItem);
-        return newItem;
 
+        //nếu các giá trị nhận về là rỗng thì trả về null
+        if (shortDescription.isBlank() || detail.isBlank()) {
+            return null;
+        }
+
+        return newItem;
+    }
+
+    //truyền vào 1 TodoItem và gán giá trị các thuộc tính của nó cho các control trong dialog
+    //nếu truyền vào null thì bỏ qua
+    public void setValueDialog(TodoItem todoItem) {
+        if (todoItem != null) {
+            shortDescriptionField.setText(todoItem.getShortDescription());
+            detailArea.setText(todoItem.getDetails());
+            deadlinePicker.setValue(todoItem.getDeadline());
+        }
     }
 }
