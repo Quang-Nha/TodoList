@@ -2,8 +2,11 @@ package com.todolist;
 
 import com.todolist.dataModel.TodoData;
 import com.todolist.dataModel.TodoItem;
+import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
+import javafx.collections.transformation.FilteredList;
+import javafx.collections.transformation.SortedList;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
@@ -18,7 +21,9 @@ import javafx.util.Callback;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 public class Controller {
 
@@ -36,7 +41,16 @@ public class Controller {
     @FXML
     private BorderPane mainBorderPane;
 
+    @FXML
+    ToggleButton filterToggleButton;
+
     private ContextMenu listContextMenu;
+
+    private Predicate<TodoItem> wantAllItems;
+
+    private Predicate<TodoItem> wantTodayItems;
+
+    private FilteredList<TodoItem> filteredList;
 
     public void initialize() {
 //        TodoItem item1 = new TodoItem("Mail birthday card", "Buy a 30th birthday card for John",
@@ -80,7 +94,44 @@ public class Controller {
 
 //        //lấy list đã có trong TodoData nhờ hàm init() trong HelloApplication thêm vào listview
 //        todoListView.getItems().addAll(TodoData.getInstance().getTodoItems());
-        todoListView.setItems(TodoData.getInstance().getTodoItems());
+
+        //bộ lọc lấy tất cả giá trị
+        wantAllItems = new Predicate<TodoItem>() {
+            @Override
+            public boolean test(TodoItem item) {
+                return true;
+            }
+        };
+
+        //bộ lọc lấy những TodoItem có ngày là hiện tại
+        wantTodayItems = new Predicate<TodoItem>() {
+            @Override
+            public boolean test(TodoItem item) {
+                return item.getDeadline().equals(LocalDate.now());
+            }
+        };
+
+        //list lọc truyền vào vào 1 ObservableList TodoData và 1 bộ lọc, bộ lọc lấy tất cả giá trị
+        //chỉ được truyền bộ lọc vào, không được gán filteredList này = 1 filteredList khác nếu không sự ràng buộc
+        //giữa các ObservableList sẽ không hoạt động
+        filteredList = new FilteredList<>(TodoData.getInstance().getTodoItems(), wantAllItems);
+
+        /*tạo 1 SortedList là 1 ObservableList(chỉ javaFX có) và gán cho hàm tạo của nó 1 filteredList
+        và 1 lớp ẩn danh implement interface Comparator khai báo cách xắp xếp các phần tử TodoItem trong list
+        sẽ nhận được 1 ObservableList SortedList được xắp xếp và mỗi khi filteredList thay đổi thì nó cũng cập nhật
+        đồng thời xắp xếp trong SortedList này*/
+        SortedList<TodoItem> sortedList = new SortedList<TodoItem>(filteredList, new Comparator<TodoItem>() {
+            @Override
+            public int compare(TodoItem o1, TodoItem o2) {
+                return o1.getDeadline().compareTo(o2.getDeadline());
+            }
+        });
+
+//        todoListView.setItems(TodoData.getInstance().getTodoItems());
+
+        //gán giá trị SortedList trên cho Item list của list view và chúng sẽ ràng buộc lẫn nhau
+        //vậy có sự ràng buộc giữa 4 ObservableList là list của TodoData, filteredList, SortedList và list của ListView
+        todoListView.setItems(sortedList);
 
         //set chỉ cho phép chọn 1 lúc 1 item trong listview
         todoListView.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
@@ -349,5 +400,45 @@ public class Controller {
 ////        sb.append(item.getDeadline() + "");
 //
 ////        itemDetailsTextArea.setText(sb.toString());
+    }
+
+    @FXML
+    //tạo bộ lọc dùng filteredList
+    public void handleFilterButton() {
+        //lấy cell đang được chọn trên listview
+        TodoItem selectedItem = todoListView.getSelectionModel().getSelectedItem();
+
+        //nếu button đang được nhấn thì bộ lọc chọn những TodoItem(cell trong listview) có ngày là ngày hôm nay
+        //chỉ thay đổi bộ lọc của filteredList không được thay bằng filteredList khác nếu không
+        //ràng buộc sẽ không hoạt động
+        if (filterToggleButton.isSelected()) {
+            filteredList.setPredicate(wantTodayItems);
+
+            //nếu bộ lọc đã lọc và không có phần tử nào phù hợp thì xóa hết giá trị các control khác để
+            //ứng dụng hiển thị trống
+            if (filteredList.isEmpty()) {
+                itemDetailsTextArea.clear();
+                deadlineLabel.setText("");
+            }
+            //nếu bộ lọc có phần tử và có gồm cell đang được chọn lúc đầu thì cho listview chọn cell này luôn
+            else if (filteredList.contains(selectedItem)) {
+                todoListView.getSelectionModel().select(selectedItem);
+            }
+            //còn lại là có chứa phần tử nhưng ko bao gồm cell được chọn lúc đầu thì cho listview chọn cell đầu tiên
+            else {
+                todoListView.getSelectionModel().selectFirst();
+            }
+        }
+        //nếu button không nhấn thì hàm lọc sẽ trả về true tất cả tức là lấy tất cả các cell đang có trong listview
+        else {
+            filteredList.setPredicate(wantAllItems);
+            todoListView.getSelectionModel().select(selectedItem);
+        }
+    }
+
+    @FXML
+    //đóng ứng dụng
+    public void hadleExit(ActionEvent event) {
+        Platform.exit();
     }
 }
